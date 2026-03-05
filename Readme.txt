@@ -1,218 +1,115 @@
-Parkinson's Disease Tremor & Fall Monitoring System
+Parkinson’s Disease Monitoring System
+1. Overview
 
-An IoT-based wearable monitoring system designed to assist patients with Parkinson's disease through real-time tremor detection and fall detection using embedded signal processing and cloud connectivity.
+This project presents a wearable monitoring system designed to assist in the observation of symptoms related to Parkinson’s Disease. The system focuses on detecting tremors, monitoring physical activity, and identifying potential fall events using motion sensing and signal processing techniques.
 
-This project uses an ESP32 microcontroller, MPU6050 motion sensor, FFT signal analysis, and Blynk IoT platform to continuously monitor patient movement and provide instant alerts for abnormal tremors or fall events.
+The device continuously collects motion data from a sensor and processes it in real time to detect abnormal patterns. When significant tremor activity or a fall is detected, the system sends alerts through an IoT platform so caregivers or medical personnel can respond quickly.
 
-🏆 3rd Prize Winner – Engineering Project Competition
+The goal of this project is to provide a low-cost and accessible monitoring solution that can improve patient safety and assist in early intervention during emergencies.
 
-Project Overview
+2. Objective
 
-Parkinson’s disease affects millions of people worldwide and often causes:
+To monitor motion patterns associated with Parkinson’s Disease using a wearable system.
 
-Resting tremors
+To detect tremors using signal processing techniques.
 
-Postural instability
+To identify potential fall events using acceleration thresholds.
 
-High risk of falls
+To send real-time alerts through an IoT platform.
 
-Difficulty in continuous symptom monitoring
+To provide continuous remote monitoring for caregivers and healthcare professionals.
 
-Traditional clinical evaluations occur only during hospital visits and cannot capture daily symptom fluctuations.
+3. Key Features
 
-This system provides continuous monitoring, allowing tremor patterns and fall events to be detected in real time.
+Real-time tremor monitoring using motion sensors.
 
-Key Features
-Real-Time Tremor Detection
+Fast Fourier Transform (FFT) based frequency analysis for tremor detection.
 
-Uses Fast Fourier Transform (FFT) to analyze gyroscope motion data and detect tremor frequencies typical in Parkinson’s disease.
+Fall detection using acceleration magnitude thresholds.
 
-Typical Parkinson's tremor frequency:
+Activity classification such as rest, walking, and tremor states.
 
-4 – 6 Hz
+Real-time IoT monitoring through the Blynk platform.
 
-The system detects tremor energy in the range:
+Emergency alerts for abnormal movement or fall events.
 
-3.5 – 7 Hz
-
-Fall Detection System
-
-A multi-stage algorithm detects falls using:
-
-Free fall detection
-
-Impact detection
-
-Gyroscope validation
-
-Confirmation timer
-
-This reduces false positives and improves reliability.
-
-IoT Cloud Monitoring
-
-Using the Blynk IoT platform, the system can:
-
-Send fall alerts instantly
-
-Display tremor status remotely
-
-Provide real-time monitoring through a mobile dashboard
-
-Local Patient Feedback
-
-The wearable device includes:
-
-OLED display showing system status
-
-Buzzer alert for fall detection
-
-Continuous monitoring indicators
-
-System Architecture
-
-Hardware Components:
+4. Hardware Components
 
 ESP32 Microcontroller
 
-MPU6050 6-axis IMU Sensor
+MPU6050 Accelerometer and Gyroscope Sensor
 
-128×64 OLED Display
+Buzzer for alert indication
 
-Buzzer Alert System
+WiFi connectivity module (integrated with ESP32)
 
-WiFi Connectivity
+Power supply
 
-Software Components:
+5. Software and Technologies
 
-Arduino Framework
+Arduino IDE for firmware development
 
-ArduinoFFT Library
+Embedded C/C++ programming
 
-Blynk IoT Platform
+Blynk IoT platform for remote monitoring
 
-Embedded Signal Processing Algorithms
+Signal processing using Fast Fourier Transform (FFT)
 
-Tremor Detection Algorithm
+6. Working Principle
+6.1 Motion Data Collection
 
-The system uses Fast Fourier Transform (FFT) to convert motion data from the time domain to the frequency domain.
+The MPU6050 sensor continuously measures acceleration and angular velocity in three axes. These signals represent the movement patterns of the user.
 
-Steps:
+6.2 Tremor Detection
 
-Gyroscope data sampled at 100 Hz
+Parkinsonian tremors typically occur in a specific frequency range. The system uses a Fast Fourier Transform (FFT) algorithm to convert the time-domain motion signal into the frequency domain. By analyzing dominant frequency components, tremor activity can be detected.
 
-64 samples collected for analysis
+6.3 Activity Monitoring
 
-Hamming window applied to reduce spectral leakage
+Movement magnitude is analyzed to classify user states such as resting, walking, or tremor activity.
 
-FFT computed to obtain frequency spectrum
+6.4 Fall Detection
 
-Energy calculated within 3.5 – 7 Hz tremor band
+If the acceleration magnitude suddenly exceeds a predefined threshold followed by inactivity, the system interprets it as a possible fall event.
 
-If the energy exceeds a threshold, tremor is detected.
+6.5 Alert System
 
-Fall Detection Logic
+When tremor intensity crosses a threshold or a fall is detected, the system sends notifications through the Blynk platform and activates a buzzer.
 
-Fall detection uses a state machine approach:
+7. Implementation
 
-States:
+The ESP32 collects real-time motion data from the MPU6050 sensor.
 
-IDLE → FREE_FALL → IMPACT → CONFIRM → FALL_CONFIRMED
+Data is processed to calculate acceleration magnitude.
 
-Detection thresholds:
+FFT is applied to analyze frequency components of motion signals.
 
-Free-fall threshold
-< 0.35 g
+Threshold algorithms determine tremor activity and fall events.
 
-Impact threshold
+Detected events are transmitted through WiFi to the Blynk IoT platform.
 
-2.5 g
+Alerts and monitoring data are displayed on a mobile dashboard.
 
-Gyroscope threshold
+8. Applications
 
-120°/s
-
-Confirmation window
-3 seconds
-
-If confirmed, the system:
-
-Activates buzzer alert
-
-Sends notification to Blynk cloud
-
-Displays fall status on OLED
-
-Data Processing Pipeline
-Task	Interval
-MPU Sensor Sampling	10 ms
-Fall Detection Check	20 ms
-FFT Tremor Analysis	200 ms
-Display & Cloud Update	500 ms
-Files in Repository
-
-tremor.txt
-
-Main program implementing:
-
-Tremor detection using FFT
-
-fake Fall detection dummy code for the stable tremor detection.
-
-OLED display updates
-
-Blynk cloud communication
-
-fall.txt
-
-Simplified fall detection algorithm used for testing fall detection logic independently.
-
-Hardware Wiring
-
-MPU6050 → ESP32
-
-SDA → GPIO 21
-SCL → GPIO 22
-
-OLED Display
-
-SDA → GPIO 21
-SCL → GPIO 22
-
-Buzzer
-
-Signal → GPIO 4
-
-Applications
-
-Parkinson's disease monitoring
+Parkinson’s Disease patient monitoring
 
 Elderly fall detection systems
 
 Remote healthcare monitoring
 
-Wearable medical devices
+Smart wearable health devices
 
-Smart rehabilitation systems
+9. Future Improvements
 
-Future Improvements
+Integration with machine learning models for more accurate detection.
 
-Machine learning based tremor classification
+Development of a compact wearable form factor.
 
-Mobile application with historical tremor graphs
+Mobile application for real-time health analytics.
 
-Battery powered wearable prototype
+Integration with hospital monitoring systems.
 
-Multi-patient cloud dashboard for hospitals
+10. Achievement
 
-Author
-
-Developed as a personal embedded systems project exploring:
-
-Biomedical sensing
-
-Signal processing
-
-IoT healthcare systems
-
-Real-time embedded programming
+This project was presented in a technical competition and secured 3rd Prize, competing against projects developed over much longer periods. The project demonstrates how embedded systems and signal processing can be combined to create practical healthcare solutions.
