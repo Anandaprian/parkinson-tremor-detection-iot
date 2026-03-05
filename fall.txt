@@ -1,0 +1,100 @@
+#define BLYNK_PRINT Serial
+#define BLYNK_TEMPLATE_ID   "TMPL3qZ1OS50v"
+#define BLYNK_TEMPLATE_NAME "TREMOR MONITORING"
+#define BLYNK_AUTH_TOKEN    "lYr26RMFXwedzARHLpd3I2XSVGwBJIrJ"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <MPU6050.h>
+
+// ---------------- WIFI ----------------
+char ssid[] = "ESPTEST";
+char pass[] = "12345678";
+
+// ---------------- BUZZER ----------------
+#define BUZZER_PIN 4
+
+// ---------------- MPU ----------------
+MPU6050 mpuFall;
+
+// ---------------- FALL SETTINGS ----------------
+const float FREEFALL_G = 0.3;    
+const float IMPACT_G = 2.6;      
+const unsigned long FALL_WINDOW = 400; // ms
+
+unsigned long freefallStart = 0;
+bool inFreefall = false;
+
+// ---------------- FALL STATE ----------------
+bool fallDetected = false;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  // Initialize I2C for Fall MPU
+  Wire.begin(19, 18);  // SDA=19, SCL=18
+  mpuFall.initialize();
+  Serial.println("Fall detection test ready");
+
+  // Connect Blynk
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+
+  Blynk.config(BLYNK_AUTH_TOKEN);
+  Blynk.connect();
+  Serial.println("Blynk connected");
+}
+
+void loop() {
+  int16_t axRaw, ayRaw, azRaw;
+  mpuFall.getAcceleration(&axRaw, &ayRaw, &azRaw);
+
+  float ax = axRaw / 16384.0;
+  float ay = ayRaw / 16384.0;
+  float az = azRaw / 16384.0;
+
+  float totalAcc = sqrt(ax*ax + ay*ay + az*az);
+
+  // Detect freefall
+  if (!inFreefall && totalAcc < FREEFALL_G) {
+    inFreefall = true;
+    freefallStart = millis();
+  }
+
+  // After freefall, watch for impact
+  if (inFreefall) {
+    if (totalAcc > IMPACT_G) {
+      unsigned long dt = millis() - freefallStart;
+      if (dt <= FALL_WINDOW) {
+        Serial.println("!! FALL CONFIRMED!!");
+        digitalWrite(BUZZER_PIN, HIGH);
+        fallDetected = true;
+        Blynk.virtualWrite(V2, 1); // Send fall alert to Blynk V2
+        delay(1000);                // buzzer duration
+        digitalWrite(BUZZER_PIN, LOW);
+      }
+      inFreefall = false;
+    }
+
+    // Timeout
+    if (millis() - freefallStart > FALL_WINDOW) {
+      inFreefall = false;
+    }
+  }
+
+  // Reset Blynk V2 if no fall detected
+  if (!inFreefall && fallDetected) {
+    fallDetected = false;
+    Blynk.virtualWrite(V2, 0);
+  }
+
+  delay(30); // preserve blocking effect
+  Blynk.run(); // keep Blynk alive
+}

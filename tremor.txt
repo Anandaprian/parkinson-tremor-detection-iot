@@ -1,0 +1,226 @@
+#define BLYNK_PRINT Serial
+#define BLYNK_TEMPLATE_ID "TMPL3qZ1OS50v"
+#define BLYNK_TEMPLATE_NAME "TREMOR MONITORING"
+#define BLYNK_AUTH_TOKEN "lYr26RMFXwedzARHLpd3I2XSVGwBJIrJ"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <MPU6050.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <arduinoFFT.h>
+#include <time.h>   // for real-time clock (NTP)
+
+// ---------------- WIFI ----------------
+char ssid[] = "ESPTEST";
+char pass[] = "12345678";
+
+// ---------------- OLED ----------------
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR 0x3C
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// ---------------- MPU ----------------
+MPU6050 mpu;
+
+// ---------------- BUZZER ----------------
+#define BUZZER_PIN 4
+
+// ---------------- FALL SETTINGS ----------------
+#define FREE_FALL_THRESH 0.35
+#define IMPACT_THRESH 2.5
+#define IMPACT_GYRO 120.0
+#define FREE_FALL_MIN 100
+#define FREE_FALL_MAX 500
+#define CONFIRM_TIME 3000
+
+// ---------------- TREMOR SETTINGS ----------------
+#define TREMOR_LOW 3.5
+#define TREMOR_HIGH 7.0
+#define SAMPLES 64
+#define SAMPLING_FREQ 100.0   // Hz
+
+float vReal[SAMPLES];
+float vImag[SAMPLES];
+ArduinoFFT<float> FFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
+
+// ---------------- TIMERS ----------------
+BlynkTimer timer;
+
+// ---------------- MOTION VARIABLES ----------------
+float gx, gy, gz, ax, ay, az;
+float gyroMag, accelMag;
+float accelBaseline = 1.0;
+
+bool walking = false;
+bool tremorDetected = false;
+bool fallAlertSent = false;
+
+unsigned long lastPeakTime = 0;
+unsigned long lastValidSwing = 0;
+unsigned long freeFallStart = 0;
+unsigned long confirmStart = 0;
+unsigned long buzzerStart = 0;
+
+int swingCount = 0;
+
+enum FallState { IDLE, FREE_FALL, IMPACT, CONFIRM, FALL_CONFIRMED };
+FallState fallState = IDLE;
+
+// ---------------- MPU SAMPLING ----------------
+void sampleMPU() {
+  int16_t rgx, rgy, rgz, rax, ray, raz;
+  mpu.getRotation(&rgx, &rgy, &rgz);
+  mpu.getAcceleration(&rax, &ray, &raz);
+
+  gx = rgx / 131.0;
+  gy = rgy / 131.0;
+  gz = rgz / 131.0;
+
+  ax = rax / 16384.0;
+  ay = ray / 16384.0;
+  az = raz / 16384.0;
+
+  gyroMag = sqrt(gx*gx + gy*gy + gz*gz);
+  accelMag = sqrt(ax*ax + ay*ay + az*az);
+
+  accelBaseline = 0.99 * accelBaseline + 0.01 * accelMag;
+}
+
+// ---------------- FALL DETECTION ----------------
+void checkFall() {
+  switch (fallState) {
+    case IDLE:
+      if (accelMag < FREE_FALL_THRESH) {
+        fallState = FREE_FALL;
+        freeFallStart = millis();
+      }
+      break;
+
+    case FREE_FALL:
+      if (millis() - freeFallStart > FREE_FALL_MAX) {
+        fallState = IDLE;
+      } else if (millis() - freeFallStart > FREE_FALL_MIN && accelMag > IMPACT_THRESH && gyroMag > IMPACT_GYRO) {
+        fallState = CONFIRM;
+        confirmStart = millis();
+      }
+      break;
+
+    case CONFIRM:
+      if (millis() - confirmStart > CONFIRM_TIME) {
+        fallState = FALL_CONFIRMED;
+        buzzerStart = millis();
+        digitalWrite(BUZZER_PIN, HIGH);
+        if (!fallAlertSent) {
+          Blynk.logEvent("fall_alert", "FALL DETECTED!");
+          fallAlertSent = true;
+        }
+      }
+      break;
+
+    case FALL_CONFIRMED:
+      if (millis() - buzzerStart > 6000) {
+        digitalWrite(BUZZER_PIN, LOW);
+        fallState = IDLE;
+        fallAlertSent = false;
+      }
+      break;
+
+    case IMPACT: break;
+  }
+}
+
+// ---------------- TREMOR DETECTION ----------------
+void processFFT() {
+
+  for (int i = 0; i < SAMPLES; i++) {
+    vReal[i] = gyroMag;
+    vImag[i] = 0;
+    delay(10);
+  }
+
+  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);
+  FFT.compute(FFTDirection::Forward);
+  FFT.complexToMagnitude();
+
+  float tremorEnergy = 0;
+  for (int i = 2; i < SAMPLES/2; i++) {
+    float freq = (i * SAMPLING_FREQ) / SAMPLES;
+    if (freq >= TREMOR_LOW && freq <= TREMOR_HIGH) {
+      tremorEnergy += vReal[i] * vReal[i];
+    }
+  }
+
+  tremorDetected = (tremorEnergy > 150);
+
+  // -------- SERIAL PRINT WITH REAL TIME --------
+  if (tremorDetected) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+      Serial.printf("Tremor YES at %02d:%02d:%02d\n",
+                    timeinfo.tm_hour,
+                    timeinfo.tm_min,
+                    timeinfo.tm_sec);
+    } else {
+      Serial.print("Tremor YES at ");
+      Serial.print(millis());
+      Serial.println(" ms (time not synced yet)");
+    }
+  }
+}
+
+// ---------------- OUTPUT UPDATE ----------------
+void updateOutputs() {
+  String modeStr;
+  if (fallState == FALL_CONFIRMED) modeStr = "FALL";
+  else modeStr = "NORMAL";
+
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.println("MODE: " + modeStr);
+  display.print("Tremor: ");
+  display.println(tremorDetected ? "YES" : "NO");
+  display.display();
+
+  Blynk.virtualWrite(V0, modeStr);
+  Blynk.virtualWrite(V1, tremorDetected ? 1 : 0);
+}
+
+// ---------------- SETUP ----------------
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(21,22);
+
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  mpu.initialize();
+
+  display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  display.clearDisplay();
+  display.display();
+
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+
+  // ✅ TIMEZONE FIX: India UTC +5:30 = 19800 seconds
+  configTime(19800, 0, "pool.ntp.org", "time.nist.gov");
+
+  Blynk.config(BLYNK_AUTH_TOKEN);
+  Blynk.connect();
+
+  timer.setInterval(10L, sampleMPU);
+  timer.setInterval(20L, checkFall);
+  timer.setInterval(200L, processFFT);
+  timer.setInterval(500L, updateOutputs);
+}
+
+// ---------------- LOOP ----------------
+void loop() {
+  Blynk.run();
+  timer.run();
+}
